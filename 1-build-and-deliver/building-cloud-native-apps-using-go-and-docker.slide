@@ -1,0 +1,153 @@
+Building cloud native apps using Go + Docker
+
+The why + how
+13 Oct 2016
+Tags: web apps, docker, the cloud
+
+Dean Karn
+Dean.Karn@gmail.com
+https://github.com/joeybloggs
+@dean_karn
+
+* Why Go?
+
+Well lets start with our requirements:
+
+- stable, fast + efficient (no brainer)
+- allow us to rapidly develop and shift as our requirements do
+- low level enough that we won't get painted into a corner
+- type safe, runtime errors suck!
+- great concurrency support
+- great network and HTTP support
+- tooling support for documentation, code formatting etc...
+- doesn't suck to write, cough.. cough.. callback hell
+
+* What Go offered
+
+- [[https://golang.org/doc/go1compat][Go's 1.0 compatibility promise]]
+- compiles down to machine code
+- open source
+- static types
+- goroutines, [[https://www.youtube.com/watch?v=cN_DpYBzKso]["Concurrency is not parallelism"]]
+- developed by Google to address some of their internal challenges.
+- tests built right into the language
+- [[https://blog.golang.org/godoc-documenting-go-code][Godoc]] generates documentation right from documentation within code
+- [[https://golang.org/cmd/gofmt/][gofmt's]] style is nobody's favorite, yet. gofmt is *everybody's* favorite
+- amazing tooling build into the language, go get, go test, gofmt go list.......
+- It's fun!
+
+* Hello World
+
+.play ./hello/main.go
+
+Ya your reading it right, Go has unicode strings!
+
+* Hello World 2
+
+It goes deeper than just handling unicode and multibye characters, but the language itself supports it:
+
+.play hello2/main.go
+
+* Building a simple Web Application
+
+come on how simple could it be?
+
+.code ./simple/main.go
+
+OK, ya but that's not very helpful..ya your right, let's see something even better
+
+* Building a better Web Application
+
+I think you can see how it can slowly come together
+
+In reality, with the interest of getting things done, using a framework can help, but I've never used one that didn't eventually paint me into a corner and so I would recommend creating your own.
+
+I recommend finding or creating a router and build from there based on you needs and eventually you can get to something like this:
+
+.link https://github.com/bluesuncorp/wash
+
+* Compiling and Cross compiling
+
+Who's ever cross compiled code before? Not fun was it?
+
+- allot of setup
+- chrooting in environment
+- and many other aspects.
+
+So how is that different in Go?
+
+	env GOOS=linux GOARCH=amd64 go build -v
+
+wait, but I didn't have to install anything...yep all of it is included within the install of Go 1.5+
+
+we'll use a slightly more complicated build command later
+	
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -v -a -ldflags "-s" -installsuffix cgo -o app-linux-amd64 .
+
+* Explaining the build command
+
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -v -a -ldflags "-s" -installsuffix cgo
+
+what does it all mean?
+
+- *CGO_ENABLED=0* disables cgo during the build command basically telling the compiler to not dynamically link any libraries needed to run on the OS, resulting in a true static binary (I'll explain why that's important in a few slides)
+- *-a* tells the compiler to rebuild all packages we may be referencing in code, through imports, with cgo disabled
+- *-installsuffixcgo* *cgo* if using a release version of Go(didn't install from source using the previous two commands) tells the compiler to also do the same for references to Go's std library
+- *-ldflags* *"-s"* tells the linker to strip the binary of the symbol table, basically removing debugging functionality for the final binary. We aren;t going to be debugging the binary live and it reduces the final binary size.
+
+* Compilation Results
+
+compiling our even better web application a few slides back using the following command:
+
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -v -a -ldflags "-s" -installsuffix cgo -o app-linux-amd64 .
+
+results in the following binary:
+
+	-rwxr-xr-x  1 dean  staff  4839296  6 Oct 09:56 app-linux-amd64
+
+Yep a 4.8MB binary that includes the entire Go runtime, GC... that I can take and run on any linux amd64 machine in the world as it is compiled down to machine code.
+
+Now we just have to find a nice way to distribute our application, Docker sounds interesting, and interestingly enough, written in Go!
+
+* Docker & Docker Containers
+
+.link https://www.docker.com/what-docker What are docker containers?
+
+The linked page explains it best, but the easiest way to think of them when first introduced is that they are light weight virtual machines that do not have an OS, but rather hook directly into the host operating system sharing it's CPU(s), RAM and some other resources.
+
+There are many different images available on [[https://hub.docker.com/search/?isAutomated=0&isOfficial=0&page=1&pullCount=0&q=ubuntu&starCount=0][dockerhub]], basically just search for what you're looking for and can spin one up in a matter of seconds. Many of these images have OS and Application libraries preinstalled.
+
+But we're going to create our own image using the binary we compiled earlier and.... wait a second what base image should we use to create our image ubuntu, debian, alpine... we really don't have any dependencies for our binary, why do we need a base image with a bunch of stuff pre-installed just taking up space? 
+
+enter the *scratch* image.
+
+* The scratch image
+
+What is the *scratch* image?
+
+It is a special image type defined by docker, and aptly named too it literally has _nothing_in_it_ and you will have to start from _scratch_
+
+And when I say scratch I mean scratch, no shell, no files not even /bin/true
+
+* Creating our Image
+
+Docker uses what's called a [[https://docs.docker.com/engine/reference/builder/][Dockerfile]] to create images; think of it as a build script. I'm going to skip over the full explanation and dive right in.
+
+Here is what our Dockerfile will look like:
+
+.code ./even-better/Dockerfile
+
+And to build our image all we have to do is run the command:
+
+	docker build -t joeybloggs/myapp .
+
+and by running the command *docker* *images* we can see that the image was created and most importantly is the size of our binary
+
+	REPOSITORY                TAG                 IMAGE ID            CREATED              SIZE
+	joeybloggs/myapp          latest              103311a5ab0b        About a minute ago   4.839 MB
+
+* Summary
+
+We've learned why Go is ideal for Web Applications, how easy it is to compile and how to create a docker image.
+
+Now I'll hand it off to Chris Jones to talk about what you can do with that image after some questions.

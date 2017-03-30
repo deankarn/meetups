@@ -1,0 +1,277 @@
+Timezones, i18n, l10n & Internationalization
+
+Dealing with & Building for
+05 Jan 2017
+Tags: timezones, i18n, l10n, internationalization
+
+Dean Karn
+Dean.Karn@gmail.com
+https://github.com/joeybloggs
+@dean_karn
+
+* Time & Humans
+
+So why is time such a big deal and why is it so complicated? Well it's a problem of our own making
+
+- Speed of travel, we can travel faster than the earth rotates.
+- Being so obsessed with time...and money
+- Complicated by daylight savings time! what! time can jump forward or backward? oh that doesn't complicate things at all...
+- How humans refer to and consume time, is not how we store it.
+
+* Example 1
+
+We say the Monday shift is from 4 to midnight; simple enough right.
+
+In reality though it's a bit different as midnight is really the start of Tuesday; I know it seems like a trivial distinction, until you start querying and aggregating data from the database.
+
+In reality we'd probably store it as the smallest unit, nanoseconds, before midnight.
+
+	// example int UTC with ms precision
+
+	4        - 2016-01-01 16:00:00.000000000 +0000 UTC
+	midnight - 2016-01-01 23:59:59.999999999 +0000 UTC
+
+So the way we talk about time isn't how we store it in this example
+
+* Example 2
+
+We say that your work schedule is from January 1st to the 31st, again simple enough right, everyone understands that.
+
+We understand to the 31st includes the entire day of the 31st, but that's not how we'd store it...
+
+We would store the 1st as midnight of that day and the 31st as the smallest unit, nanoseconds, before midnight of the next day to properly include all of the time in the date range; again it seems trivial untill querying and aggregating data.
+
+	// example int UTC with ms precision
+
+	1st  - 2016-01-01 16:00:00.000000000 +0000 UTC
+	31st - 2016-01-31 23:59:59.999999999 +0000 UTC
+
+* Time & Humans Summary
+
+So as you can see with just a couple of *simple* examples that humans talk about and consume time information differently than it is stored.
+
+There are I'm sure many more complex scenarios, but most of them tend to stem from the same issues as the following two examples demonstrated.
+
+* Daylight Savings Time
+
+Daylight saving time (DST) or summer time is the practice of advancing clocks during summer months by one hour so that evening daylight lasts an hour longer, while sacrificing normal sunrise times. [[https://en.wikipedia.org/wiki/Daylight_saving_time]]
+
+This practive, for pure human convenience, wreaks havoc on the realities of time and systems that rely on it.
+
+See the next examples regarding patient visits in the ER
+
+* Example 1
+
+You record a patients visit to the ER 5 minutes prior the the clocks turning back, let's call it visit #1, and then record another patient visit 5 minutes after the clocks turn back, let's call it visit #2.
+
+So visit #2 happened after visit #1, but that's not what the visits timestamp will say, it will actually record visit #2 as happening before visit #1 when recording in the local time.
+
+Daylight Savings Time is causing problems here, and this is a simple example, in actuality there are many timestamps within a single patient visit such as:
+
+- Registration
+- Assessment (Physician sees patient)
+- Disposition (Going Home, Being Admitted...)
+
+* Example 2
+
+So here's an even worse scenario regarding a single patients visit which took less than an hour.
+
+So the patient gets registered, is assessed by the physician within half an hour, the clocks turn back and then the patient is dispositioned 5 minutes afterward.
+
+So now the record shows that the patient went home before arriving at the hospital and seeing a physician; wait what? that doesn't even make any sense!
+
+Daylight Savings Time sucks!
+
+* Example 3
+
+it's amazing how easily it can be catastrophic and how many time major service have gone down because of this; take the following example:
+
+		before := time.Now()
+
+		// a loop where an event is being waited for, in this case using time.Sleep
+		for {
+			time.Sleep(time.Second * 1)
+
+			var event *Event // nil by default
+
+			after := time.Now()
+			diff := after.Sub(before)
+
+			if diff > time.Minute*30 {
+				event = &Event{slow: true}
+			} else if diff > time.Minute*5 {
+				event = &Event{slow: false}
+			}
+
+			fmt.Println(event.slow)
+			before = after
+		}
+
+* How To Gain Control
+
+So how do we deal with Daylight Savings Time? Well there are a couple ways I'm aware of:
+
+1. Write some pretty complicated logic that will check every timestamp to try and predict time changes; but even this is not ideal because as seen in example #2 it's more than one timestamp that would be affected and so this logic would have to be done on a case by case basis.
+
+2. UTC to the rescue! wouldn't it be nice if we could store time where there is no Daylight Savings Time and no Timezone offset... oh right there is at GMT (Greenwich Mean Time), also referred to as UTC (Coordinated Universal Time).
+
+UTC! the light at the end of the ... with some caveats
+
+* UTC, What Caveats
+
+#1 rule if using UTC is ensure your system time/hardware clock is set to UTC!
+
+Most, if not all, programming languages assume you want Time in the local system time, for example:
+
+	// this will return the current time, with the System Time's local
+	time.Now()
+
+	// this will give us UTC but after intially applying the local time
+	time.Now().UTC()
+
+	// this will do esentially the opposite of the above turning UTC into local time after parsing
+	time.Unix(seconds, nanoseconds)
+
+So to avoid our problem of Daylight Savings Time, the System Time must be set to UTC to avoid the time ever being in a Timezone that has Daylight Savings Time and the potential time jump; if you don't do this, look out there be dragons!
+
+* Example 3 Cont'd
+
+Proof that time difference can be negative.
+
+	package main
+
+	import (
+		"fmt"
+		"time"
+	)
+
+	func main() {
+
+		before := time.Date(2016, 03, 13, 1, 59, 59, 0, time.Local)
+		after := time.Date(2016, 03, 13, 2, 0, 0, 0, time.Local)
+
+		// diff since last event
+		diff := after.Sub(before)
+
+		fmt.Printf("Before:%s\n", before)
+		fmt.Printf("After:%s\n", after)
+		fmt.Printf("Diff:%s\n", diff)
+	}
+
+.link https://play.golang.org/p/k4cUbjJgUe Proof setting System Time to UTC Fixes this
+
+* Before continuing
+
+OK now so it I've been talking like you should always store your time in UTC, however allot of people may argue it depends on the complexity of your application; if you have a simple program that will only be used from one Timezone then what does it matter? ... Big Data
+
+Let's say you have some Apparel Software and 1000 clients using the software that seel t-shirts. So each client doesn't care about the other, but what they might be interested in knowing the trends of the industry such as what color shirts are selling the most, and which are on the rise so they can keep them in stock and sell more.
+
+might find out the black t-shirts are the biggest seller, but orange t-shirt sales are on the rise because orange is the new black ;)
+
+If you store time as UTC in the backend for all you clients, it's easy to aggregate the data accross Timezones around the world.
+
+Moreover, now your company can build and get extra revenue from a new forcasting module you can easily build.
+
+* Additional
+
+Sometime it may also be good to do/store the following; but it's really on an application by application basis.
+
+- Store originating Timezone Info (for easy or automated conversion logic later)
+- Store timestamp as int64 in nanoseconds (not all languages Time object handles nanosecond precision)
+- Really think about how time will be used within your application before moving forward!
+- Don't worry if you're having a hard time grasping time, or second guessing yourself even when you though you already understood it; even those very familiar with time second guess themselves. I think I second guessed myself and had to re-prove a bunch of stuff to myself about a dozen times while writting this.
+
+Best advice is to write a proof-of-concept to prove it to youself or your team.
+
+* Break Time
+
+Time for a break!
+
+* l10n, i18n & Internationalization
+
+So what are/is l10n, i18n & Internationalization
+
+l10n aka Localization - refers to the adaptation of a product, application or document content to meet the language, cultural and other requirements of a specific target market (a locale); this includes Number, Date, Time and Currency formating, collation and so forth
+
+i18n aka Internationalization - is the design and development of a product, application or document content that enables easy localization for target audiences that vary in culture, region, or language.
+
+So in lamens terms l10n is the locale information and rules and i18n is the infrastructure put in place to be able to transparently use and switch between locales.
+
+* Information
+
+There are l10n and i18n libraries/modules/plugins for almost all languages and unless there isn't one or one with correct informatin or rules I'd recommend not creating one of your own... unless you like pain... ten by all means.
+
+So where's the information and rules come from? It used to be that it came from peoples heads and a great number of disparate specs until
+.link http://cldr.unicode.org/index Unicode CLDR Project
+
+The CLDR project contains the information to create an l10n library with Formatting, Plural Rules and Collation information.
+
+* How to implement i18n
+
+Well generally there are two ways:
+
+1. Have a separate UI/UX layer with hardcoded translated text within it. eg. in a website a separate html page per locale.
+
+2. Have the translations completely dynamic (recommended) eg. a single html template that renders the translations passed into it.
+
+Why is #2 recommended? because your going to have to do do some dynamic translations because of the Plural Rules... but we'll get to that in future slides.
+
+* Example 1
+
+	en.html
+
+	<html>
+	<head></head>
+	<body>
+		Hello World
+	</body>
+	</html> 
+
+	fr.html
+
+	<html>
+	<head></head>
+	<body>
+		Bonjour le monde
+	</body>
+	</html>
+
+It seems like a great idea until you your website gets a large number of pages then changes or upgrades become a maintenance nightmare!
+
+* Example 2
+
+	{{ .Greeting }} - is information passed into hello.html for parsing
+
+	hello.html
+
+	<html>
+	<head></head>
+	<body>
+		{{ .Greeting }}
+	</body>
+	</html>
+
+The bigger your application gets, your not incurring more maintenance.
+
+* Plural Rules
+
+These cause translations to be dynamic; here's an example:
+
+There is 1 day left in your subscription
+vs
+There is 2 days left in your subscription
+
+So depending on the the dynamic day value the actual translation is different "day" vs "days"; and that's just for English there are actually more rules for different languages including:
+
+- One
+- Two
+- Few
+- Many
+- Other
+.link http://www.unicode.org/cldr/charts/29/supplemental/language_plural_rules.html Plural Rules
+
+* Example Application
+
+Let's take a look at an example application to see how easly it is once all the boilerplate code is created.
+
+.link https://github.com/joeybloggs/meetups/tree/master/2-timezones-and-internationalization/i18n-app Web App

@@ -1,0 +1,18 @@
+{{ define "home" }}
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>Home</title>
+	</head>
+	<body>
+		<p>My Locale is "{{ .Locale }}"</p>
+		<p>Days Left #1: {{ .DaysLeft1 }}</p>
+		<p>Days Left #2: {{ .DaysLeft2 }}</p>
+		<p>Date: {{ .Date }}</p>
+		<p>Time: {{ .Time }}</p>
+		<p>Currency: {{ .Currency }}</p>
+		<p>Weekdays: {{ .Weekdays }}</p>
+		<p>Months: {{ .Months }}</p>
+	</body>
+</html>
+{{ end }}
